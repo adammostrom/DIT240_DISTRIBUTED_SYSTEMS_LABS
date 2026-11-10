@@ -1,4 +1,6 @@
 # 1 HTTP SERVER
+- net/http not allowed. only net package: https://pkg.go.dev/net
+
 
 [] Accept HTTP requests (GET, POST) others -> "Not Implemented (501)"
 [] Return response data from locally stored files to client
