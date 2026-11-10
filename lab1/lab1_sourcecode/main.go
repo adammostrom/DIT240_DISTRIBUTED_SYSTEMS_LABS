@@ -6,6 +6,7 @@ import (
 	"net" // https://pkg.go.dev/net
 	"os"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -124,6 +125,7 @@ func startServer(args []string, port int) {
 }
 
 type Log struct {
+	mu    sync.Mutex
 	Event []SysInfo
 }
 
@@ -141,9 +143,11 @@ func (l *Log) LogEvent(msg string, level string) {
 		Timestamp: time.Now(),
 		Level:     level,
 	}
-
+	l.mu.Lock()
 	l.Event = append(l.Event, sysInfo)
+	l.mu.Unlock()
 
+	// Read only, no need for sync
 	sysInfo.PrintInfo()
 
 }
@@ -172,39 +176,3 @@ func validatePort(port int) bool {
 	}
 	return false
 }
-
-/*
-Handle concurrencry for the log, since the program uses goroutines, adding/reading/printing a log from many goroutines can create race conditions:
-investigate this claim, but quickfix:
-
-type Log struct {
-    mu     sync.Mutex
-    Events []SysInfo
-}
-
-type SysInfo struct {
-    Msg       string
-    Timestamp time.Time
-    Level     string
-}
-
-func (l *Log) Log(msg, level string) {
-    event := SysInfo{
-        Msg:       msg,
-        Timestamp: time.Now(),
-        Level:     level,
-    }
-
-    l.mu.Lock()
-    l.Events = append(l.Events, event)
-    l.mu.Unlock()
-
-    fmt.Printf(
-        "[%s] %s %s\n",
-        event.Level,
-        event.Timestamp.Format("15:04:05"),
-        event.Msg,
-    )
-}
-
-*/
