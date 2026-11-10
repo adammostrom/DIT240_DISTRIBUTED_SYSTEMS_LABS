@@ -64,14 +64,14 @@ func createServer(port int, host string, log *Log) error {
 	// Assume tcp
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.logEvent(fmt.Sprintf("listen on %s: %w", addr, err), LevelError)
+		log.LogEvent(fmt.Sprintf("listen on %s: %v", addr, err), LevelError)
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
 	defer ln.Close()
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			log.logEvent(fmt.Sprintf("error: %v", err), LevelError)
+			log.LogEvent(fmt.Sprintf("error: %v", err), LevelError)
 			return fmt.Errorf("error: %w", err)
 		}
 		go handleConnection(conn, addr, log)
@@ -87,12 +87,12 @@ func handleConnection(conn net.Conn, addr string, log *Log) {
 
 	n, err := conn.Read(buf)
 	if err != nil {
-		log.logEvent(fmt.Sprintf("read error: %v\n", err), LevelError)
+		log.LogEvent(fmt.Sprintf("read error: %v\n", err), LevelError)
 		fmt.Printf("read error: %v\n", err)
 		return
 	}
 	request := string(buf[:n])
-	log.logEvent(fmt.Sprintf("received: %s\n", request), LevelInfo)
+	log.LogEvent(fmt.Sprintf("received: %s\n", request), LevelInfo)
 	fmt.Printf("received: %s\n", request)
 
 }
@@ -134,7 +134,7 @@ const (
 )
 
 // Appends a SysInfo to the Log and prints the SysInfo using fmt.Printf
-func (l *Log) logEvent(msg string, level string) {
+func (l *Log) LogEvent(msg string, level string) {
 
 	sysInfo := SysInfo{
 		Msg:       msg,
@@ -159,7 +159,7 @@ type SysInfo struct {
 }
 
 func (s *SysInfo) PrintInfo() {
-	fmt.Printf("[%s] %s  %v \n", s.Level, s.Timestamp.Format("15:04:00"), s.Msg)
+	fmt.Printf("[%s] %s  %v \n", s.Level, s.Timestamp.Format("15:04:05"), s.Msg)
 }
 
 // Allowed ports
@@ -172,3 +172,39 @@ func validatePort(port int) bool {
 	}
 	return false
 }
+
+/*
+Handle concurrencry for the log, since the program uses goroutines, adding/reading/printing a log from many goroutines can create race conditions:
+investigate this claim, but quickfix:
+
+type Log struct {
+    mu     sync.Mutex
+    Events []SysInfo
+}
+
+type SysInfo struct {
+    Msg       string
+    Timestamp time.Time
+    Level     string
+}
+
+func (l *Log) Log(msg, level string) {
+    event := SysInfo{
+        Msg:       msg,
+        Timestamp: time.Now(),
+        Level:     level,
+    }
+
+    l.mu.Lock()
+    l.Events = append(l.Events, event)
+    l.mu.Unlock()
+
+    fmt.Printf(
+        "[%s] %s %s\n",
+        event.Level,
+        event.Timestamp.Format("15:04:05"),
+        event.Msg,
+    )
+}
+
+*/
