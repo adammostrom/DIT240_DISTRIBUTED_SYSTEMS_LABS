@@ -1,16 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"log"
 	"net" // https://pkg.go.dev/net
 	"os"
 	"strconv"
-	"sync"
-	"time"
 )
 
-const LOCALHOST = "http://localhost/"
+const LOCALHOST = "https://localhost/"
+const LOCALHOST_127 = "127.0.0.1"
 
 func main() {
 
@@ -32,29 +31,32 @@ func main() {
 	}
 
 	//connectToServer()
-	createServer(port, LOCALHOST, log)
-	running_port := SysInfo{
-		Msg:       fmt.Sprintf("Running server on port: %d", port),
-		Timestamp: time.Now(),
-		Level:     "INFO",
-	}
-	log.Event = append(log.Event, running_port)
-
-	running_port.PrintInfo()
+	createServer(port, LOCALHOST_127, log)
 
 }
 
 // Connect to a server:
 
-func connectToServer() {
-	conn, err := net.Dial("tcp", "golang.org:80")
-	if err != nil {
-		// handle error
-	}
-	fmt.Fprintf(conn, "GET / HTTP/1.0\r\n\r\n")
-	status, err := bufio.NewReader(conn).ReadString('\n')
+func connectToServer(port int, host string) {
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
 
-	fmt.Printf("status: %v\n", status)
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	// Write a message to the server. "_" = bytecount
+	_, err = conn.Write([]byte("Hello from client"))
+	if err != nil {
+		log.Fatal()
+	}
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(string(buf[:n]))
 }
 
 // Create a server
@@ -68,13 +70,16 @@ func createServer(port int, host string, log *Log) error {
 		log.LogEvent(fmt.Sprintf("listen on %s: %v", addr, err), LevelError)
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
+	log.LogEvent(fmt.Sprintf("Running server on port: %d", port), LevelInfo)
 	defer ln.Close()
 	for {
+		// conn = a client
 		conn, err := ln.Accept()
 		if err != nil {
 			log.LogEvent(fmt.Sprintf("error: %v", err), LevelError)
-			return fmt.Errorf("error: %w", err)
+			continue
 		}
+
 		go handleConnection(conn, addr, log)
 	}
 }
@@ -83,18 +88,26 @@ func createServer(port int, host string, log *Log) error {
 func handleConnection(conn net.Conn, addr string, log *Log) {
 
 	defer conn.Close()
-
+	fmt.Println("Accepted connection")
 	buf := make([]byte, 1024)
 
-	n, err := conn.Read(buf)
-	if err != nil {
-		log.LogEvent(fmt.Sprintf("read error: %v\n", err), LevelError)
-		fmt.Printf("read error: %v\n", err)
-		return
+	// Expect client to write something
+	for {
+		n, err := conn.Read(buf)
+		if err != nil {
+			log.LogEvent(fmt.Sprintf("read error: %v\n", err), LevelError)
+			fmt.Printf("read error: %v\n", err)
+			return
+		}
+		request := string(buf[:n])
+		log.LogEvent(fmt.Sprintf("received: %s\n", request), LevelInfo)
+		fmt.Printf("received: %s\n", request)
+		_, err = conn.Write([]byte("Hello from server!\n"))
+		if err != nil {
+			fmt.Printf("write error: %v\n", err)
+			return
+		}
 	}
-	request := string(buf[:n])
-	log.LogEvent(fmt.Sprintf("received: %s\n", request), LevelInfo)
-	fmt.Printf("received: %s\n", request)
 
 }
 
@@ -122,57 +135,4 @@ func startServer(args []string, port int) {
 		// Keep server running on port 8080
 		log.Println("Server running at http://localhost:8080")
 		log.Fatal(server.ListenAndServe()) */
-}
-
-type Log struct {
-	mu    sync.Mutex
-	Event []SysInfo
-}
-
-const (
-	LevelInfo  = "INFO"
-	LevelWarn  = "WARN"
-	LevelError = "ERROR"
-)
-
-// Appends a SysInfo to the Log and prints the SysInfo using fmt.Printf
-func (l *Log) LogEvent(msg string, level string) {
-
-	sysInfo := SysInfo{
-		Msg:       msg,
-		Timestamp: time.Now(),
-		Level:     level,
-	}
-	l.mu.Lock()
-	l.Event = append(l.Event, sysInfo)
-	l.mu.Unlock()
-
-	// Read only, no need for sync
-	sysInfo.PrintInfo()
-
-}
-func NewLog() *Log {
-	return &Log{}
-}
-
-// Expand with more parameters as it grows
-type SysInfo struct {
-	Msg       string
-	Timestamp time.Time
-	Level     string
-}
-
-func (s *SysInfo) PrintInfo() {
-	fmt.Printf("[%s] %s  %v \n", s.Level, s.Timestamp.Format("15:04:05"), s.Msg)
-}
-
-// Allowed ports
-const ALLOWED_PORT_UPPER = 65355
-const ALLOWED_PORT_LOWER = 1024
-
-func validatePort(port int) bool {
-	if port > ALLOWED_PORT_LOWER && port < ALLOWED_PORT_UPPER {
-		return true
-	}
-	return false
 }
