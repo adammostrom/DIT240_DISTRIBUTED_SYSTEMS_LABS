@@ -17,6 +17,8 @@ This is a server:
 Its saying:
 "OS, notify whenever someone tries to connect to the TCP port 8000"
 
+Its not enough for accepting a connection, its only saying "listen to this port", but we havent specified what happens when someone is actually connecting (when we get a bytestream on that port). We only told the program to listen.
+
 Now its a listening socket, no connection yet.
 
 1. Go asks OS for socket
@@ -59,7 +61,37 @@ a TCP handshake between server and client ensures both parties agree on paramete
 
 4. `net.Conn` exists on both sides (client = server connection), (server = a connected client)
 -> Both can Read(), Write(), Close()
+(TCP is bidirectional)
 
-`net.Conn` is basically an established LIVE connection,
+`net.Conn` is basically an established LIVE TCP connection,
 Read = Receive bytes
 Write = send bytes
+RemoteAddr = client address.
+LOcalAddr = Your address
+
+server can write:
+`conn.Write([]byte("hello"))`
+which writes hello to the connected client, the client has a buffer:
+`buf := make([]byte, 1024)`
+which it reads the bytestream to
+`conn.Read(buf)`
+
+which works bidirectional with the server as read and client as write.
+
+## GOROUTINES AND CONNECTIONS
+
+Without goroutines:
+Client A connects
+  |
+  +-- takes 5 minutes
+
+Client B waiting...
+Client C waiting...
+Client D waiting...
+
+with goroutines:
+Client A -> Goroutine #1
+Client B -> Goroutine #2
+Client C -> Goroutine #3
+
+Each client gets a goroutine.
